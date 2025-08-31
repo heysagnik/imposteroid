@@ -1,103 +1,637 @@
-import Image from "next/image";
+'use client';
+
+import { useCallback, useEffect, useRef, useState, useReducer } from 'react';
+import { useRouter } from 'next/navigation';
+import { ThemeToggle } from '../components/ThemeToggle';
+
+const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200 MB
+const ALLOWED_TYPES = [
+  'application/vnd.android.package-archive',
+  'application/zip',
+  'application/octet-stream',
+];
+
+function bytesToReadable(size: number) {
+  const mb = size / (1024 * 1024);
+  if (mb < 1) return `${Math.round(size / 1024)} KB`;
+  return `${mb.toFixed(1)} MB`;
+}
+
+function formatSpeed(bps: number) {
+  if (!bps || bps <= 0) return '—';
+  const kbps = bps / 1024;
+  const mbps = kbps / 1024;
+  if (mbps >= 1) return `${mbps.toFixed(2)} MB/s`;
+  if (kbps >= 1) return `${kbps.toFixed(0)} KB/s`;
+  return `${bps.toFixed(0)} B/s`;
+}
+
+function formatDuration(totalSeconds: number) {
+  const s = Math.max(0, Math.round(totalSeconds));
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+
+function stageFriendly(stage?: string) {
+  if (!stage) return 'Starting…';
+  return stage.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+interface AnalysisResult {
+  identity: { packageName: string; version: string };
+  certificate: { valid: boolean; issuer: string };
+  risk: { permissions: string[]; obfuscated: boolean };
+}
+
+// Upload section keeps same visual layout; internal logic improved
+function UploadSection({
+  onSelect,
+  selectedFile,
+  onClear,
+  onResults,
+}: {
+  onSelect: (file: File) => void;
+  selectedFile?: File | null;
+  onClear?: () => void;
+  onResults?: (results: any) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const openPicker = useCallback(() => inputRef.current?.click(), []);
+
+  const validateAndSelect = useCallback(
+    (file?: File | null) => {
+      setError(null);
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith('.apk')) {
+        setError('Select a .apk file.');
+        return;
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        setError(`File too large (max ${Math.round(MAX_FILE_SIZE / 1024 / 1024)} MB).`);
+        return;
+      }
+      if (
+        file.type &&
+        !ALLOWED_TYPES.includes(file.type) &&
+        !file.name.toLowerCase().endsWith('.apk')
+      ) {
+        setError('Unsupported file type.');
+        return;
+      }
+      onSelect(file);
+    },
+    [onSelect]
+  );
+
+  const onInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const f = e.target.files?.[0] ?? null;
+      validateAndSelect(f);
+      // reset input to allow re-selecting same file
+      e.currentTarget.value = '';
+    },
+    [validateAndSelect]
+  );
+
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragging(false);
+      validateAndSelect(e.dataTransfer.files?.[0] ?? null);
+    },
+    [validateAndSelect]
+  );
+
+  useEffect(() => {
+    const prevent = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    window.addEventListener('dragover', prevent);
+    window.addEventListener('drop', prevent);
+    return () => {
+      window.removeEventListener('dragover', prevent);
+      window.removeEventListener('drop', prevent);
+    };
+  }, []);
+
+  return (
+    <section
+      className="w-full flex flex-col items-center justify-center text-center px-4 sm:px-6 py-16 sm:py-20"
+      aria-label="Imposteroid APK Analyzer"
+    >
+      <div className="sunlight-top" />
+      <div className="theme-toggle-container">
+        <ThemeToggle />
+      </div>
+
+      <div className="relative max-w-3xl mx-auto w-full">
+        <div className="pointer-events-none absolute -inset-x-20 -top-24 -z-10 h-48 bg-gradient-to-r from-blue-100 via-sky-100 to-cyan-100 blur-2xl dark:from-blue-900/20 dark:via-sky-900/20 dark:to-cyan-900/20" />
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100 leading-tight">
+          Detect Fake Android Apps
+        </h1>
+
+        <p className="mt-4 text-base sm:text-lg text-slate-600 dark:text-slate-400 leading-relaxed max-w-xl mx-auto">
+          Analyze APK identity, certificates, and permissions to spot imposters.
+        </p>
+
+        <div className="mt-8 sm:mt-10">
+          {!selectedFile && (
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragging(true);
+              }}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                setDragging(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                setDragging(false);
+              }}
+              onDrop={onDrop}
+              onClick={openPicker}
+              role="button"
+              aria-label="Upload or drop APK file"
+              className={`group relative mx-auto w-full max-w-2xl cursor-pointer rounded-2xl border border-dashed bg-white/70 dark:bg-slate-800/70 p-6 sm:p-8 text-left shadow-sm backdrop-blur transition hover:shadow-md focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-300 dark:focus-visible:ring-blue-600 ${
+                dragging
+                  ? 'border-blue-400 bg-sky-50 dark:bg-sky-900/20 ring-4 ring-blue-100 dark:ring-blue-900/20'
+                  : 'border-slate-200 dark:border-slate-600'
+              }`}
+            >
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div
+                  className={`flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl transition ${
+                    dragging ? 'bg-blue-600' : 'bg-blue-50 dark:bg-blue-900/20'
+                  }`}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className={`h-5 w-5 sm:h-6 sm:w-6 ${
+                      dragging ? 'text-white' : 'text-blue-600 dark:text-blue-400'
+                    }`}
+                    aria-hidden="true"
+                  >
+                    <path d="M12 16a1 1 0 0 1-1-1V9.41l-1.3 1.3a1 1 0 1 1-1.4-1.42l3-3a1 1 0 0 1 1.4 0l3 3a1 1 0 0 1-1.4 1.42L13 9.4V15a1 1 0 0 1-1 1Z" />
+                    <path d="M6 20a4 4 0 0 1-4-4 4.1 4.1 0 0 1 3-3.87 6 6 0 0 1 11.62-1.54A4.5 4.5 0 0 1 22 15.5 4.5 4.5 0 0 1 17.5 20H6Z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm sm:text-base font-medium text-slate-900 dark:text-slate-100">
+                    Drop your APK here or{' '}
+                    <span className="text-blue-600 dark:text-blue-400 underline-offset-2 group-hover:underline">
+                      browse
+                    </span>
+                  </p>
+                  <p className="mt-1 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                    Only .apk files up to {Math.round(MAX_FILE_SIZE / 1024 / 1024)} MB
+                  </p>
+                </div>
+              </div>
+
+              
+
+              <input
+                ref={inputRef}
+                type="file"
+                accept=".apk,application/vnd.android.package-archive"
+                onChange={onInputChange}
+                className="hidden"
+                aria-hidden="true"
+              />
+
+              {error && (
+                <div
+                  role="alert"
+                  className="mt-3 text-sm font-medium text-red-600 dark:text-red-400"
+                >
+                  {error}
+                </div>
+              )}
+            </div>
+          )}
+
+          {selectedFile && (
+            <div className="mx-auto w-full max-w-2xl">
+            
+              <AnalysisSection
+                file={selectedFile}
+                onResults={(r) => onResults && onResults(r)}
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="mt-8 sm:mt-12 grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 text-left max-w-2xl mx-auto">
+          {[
+            {
+              t: 'Identity',
+              d: 'Check package names and branding.',
+              icon: (
+                <img
+                  src="/fingerprint.png"
+                  alt="Identity"
+                  className="h-5 w-5 text-blue-600 dark:text-blue-400"
+                />
+              ),
+            },
+            {
+              t: 'Certificate',
+              d: 'Verify signing and repack signs.',
+              icon: (
+                <img
+                  src="/certificate.png"
+                  alt="Certificate"
+                  className="h-5 w-5 text-blue-600 dark:text-blue-400"
+                />
+              ),
+            },
+            {
+              t: 'Risk',
+              d: 'Flag permissions and obfuscation.',
+              icon: (
+                <img
+                  src="/compliance.png"
+                  alt="Risk"
+                  className="h-5 w-5 text-blue-600 dark:text-blue-400"
+                />
+              ),
+            },
+          ].map((f) => (
+            <div
+              key={f.t}
+              className="rounded-xl border border-slate-100 dark:border-slate-600 bg-white dark:bg-slate-800 p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-center gap-3 mb-2">
+                {f.icon}
+                <h3 className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                  {f.t}
+                </h3>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                {f.d}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <p className="mt-8 sm:mt-10 text-[11px] text-slate-500 dark:text-slate-400 max-w-xl mx-auto leading-relaxed">
+          Upload authorized APKs only. Heuristic results; not definitive malware detection.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+// Analysis reducer
+type Phase = 'idle' | 'uploading' | 'queued' | 'processing' | 'complete' | 'error';
+
+interface AnalysisState {
+  phase: Phase;
+  uploadProgress: number;
+  uploadLoaded: number;
+  uploadTotal: number;
+  uploadSpeedBps: number;
+  uploadEtaSec: number | null;
+  processingProgress: number;
+  processingStage: string | null;
+  error: string | null;
+  startedProcessing: boolean;
+  loading: boolean;
+}
+
+type Action =
+  | { type: 'UPLOAD_PROGRESS'; loaded: number; total: number; bps: number; eta: number | null }
+  | { type: 'SET_PHASE'; phase: Phase }
+  | { type: 'SET_ERROR'; message: string }
+  | { type: 'SET_STAGE'; stage: string }
+  | { type: 'ADVANCE_PROCESSING'; value?: number }
+  | { type: 'COMPLETE' }
+  | { type: 'RESET_UPLOAD_SIM'; pct?: number };
+
+const initialAnalysis: AnalysisState = {
+  phase: 'idle',
+  uploadProgress: 0,
+  uploadLoaded: 0,
+  uploadTotal: 0,
+  uploadSpeedBps: 0,
+  uploadEtaSec: null,
+  processingProgress: 0,
+  processingStage: null,
+  error: null,
+  startedProcessing: false,
+  loading: false,
+};
+
+function analysisReducer(state: AnalysisState, action: Action): AnalysisState {
+  switch (action.type) {
+    case 'SET_PHASE':
+      return { ...state, phase: action.phase, loading: action.phase !== 'complete' && action.phase !== 'error' };
+    case 'UPLOAD_PROGRESS':
+      return {
+        ...state,
+        uploadLoaded: action.loaded,
+        uploadTotal: action.total,
+        uploadProgress: Math.min(100, Math.round((action.loaded / action.total) * 100)),
+        uploadSpeedBps: action.bps,
+        uploadEtaSec: action.eta,
+      };
+    case 'SET_ERROR':
+      return { ...state, error: action.message, phase: 'error', loading: false };
+    case 'SET_STAGE':
+      return { ...state, processingStage: stageFriendly(action.stage) };
+    case 'ADVANCE_PROCESSING':
+      return {
+        ...state,
+        phase: state.phase === 'queued' ? 'processing' : state.phase,
+        startedProcessing: true,
+        processingProgress: Math.min(100, action.value != null ? action.value : state.processingProgress + 15),
+      };
+    case 'COMPLETE':
+      return { ...state, processingProgress: 100, phase: 'complete', loading: false };
+    case 'RESET_UPLOAD_SIM':
+      return { ...state, uploadProgress: action.pct ?? state.uploadProgress };
+    default:
+      return state;
+  }
+}
+
+function AnalysisSection({
+  file,
+  onResults,
+}: {
+  file: File;
+  onResults: (results: AnalysisResult) => void;
+}) {
+  const [state, dispatch] = useReducer(analysisReducer, initialAnalysis);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    let cancelled = false;
+    let simulateId: number | null = null;
+    let xhr: XMLHttpRequest | null = null;
+
+    async function start() {
+      dispatch({ type: 'SET_PHASE', phase: 'uploading' });
+      dispatch({ type: 'RESET_UPLOAD_SIM' });
+      const formData = new FormData();
+      formData.append('apk', file);
+
+      xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/upload');
+
+      let lastTs = Date.now();
+      let lastLoadedLocal = 0;
+
+      // Simulated slow advance to avoid stuck bar early
+      simulateId = window.setInterval(() => {
+        dispatch({ type: 'RESET_UPLOAD_SIM' });
+      }, 1000);
+
+      xhr.upload.onprogress = (e) => {
+        if (!e.lengthComputable) return;
+        const now = Date.now();
+        const deltaBytes = e.loaded - lastLoadedLocal;
+        const deltaMs = now - lastTs;
+        const bps = deltaMs > 0 && deltaBytes >= 0 ? (deltaBytes / deltaMs) * 1000 : 0;
+        const remaining = Math.max(0, e.total - e.loaded);
+        const eta = bps > 0 ? Math.round(remaining / bps) : null;
+        lastTs = now;
+        lastLoadedLocal = e.loaded;
+        dispatch({ type: 'UPLOAD_PROGRESS', loaded: e.loaded, total: e.total, bps, eta });
+      };
+
+      const uploadPromise = new Promise<{ job_id?: string }>((resolve, reject) => {
+        xhr!.onload = () => {
+          try {
+            if (xhr!.status >= 200 && xhr!.status < 300) resolve(JSON.parse(xhr!.responseText || '{}'));
+            else reject(new Error('Upload failed'));
+          } catch (err) {
+            reject(err);
+          }
+        };
+        xhr!.onerror = () => reject(new Error('Upload network error'));
+        xhr!.onabort = () => reject(new Error('Upload aborted'));
+      });
+
+      xhr.send(formData);
+
+      let jobId: string | undefined;
+      try {
+        const uploadJson = await uploadPromise;
+        jobId = uploadJson.job_id;
+        if (!jobId) throw new Error('Missing job_id in response');
+      } catch (e: any) {
+        if (cancelled) return;
+        if (simulateId) clearInterval(simulateId);
+        dispatch({ type: 'SET_ERROR', message: e?.message || 'Upload failed' });
+        return;
+      } finally {
+        if (simulateId) clearInterval(simulateId);
+      }
+
+      if (cancelled) return;
+      dispatch({ type: 'SET_PHASE', phase: 'queued' });
+
+      // Poll sequentially
+      const startTime = Date.now();
+      const timeoutMs = 2 * 60 * 1000;
+      let lastSignature: string | null = null;
+
+      while (!cancelled && Date.now() - startTime < timeoutMs) {
+        try {
+          const res = await fetch(`/api/result/${jobId}`, {
+            signal: abortRef.current?.signal,
+            cache: 'no-store',
+          });
+          if (!res.ok) {
+            await new Promise((r) => setTimeout(r, 1500));
+            continue;
+          }
+            const json = await res.json();
+            const status: string | undefined = json?.status;
+            const stage: string | undefined = json?.stage || json?.progress?.stage;
+            const sig = `${status || ''}::${stage || ''}`;
+            if (sig !== lastSignature) {
+              dispatch({ type: 'ADVANCE_PROCESSING' });
+              lastSignature = sig;
+            }
+            if (stage) dispatch({ type: 'SET_STAGE', stage });
+            if (status === 'processing' || status === 'running') {
+              dispatch({ type: 'SET_PHASE', phase: 'processing' });
+            }
+            if (status === 'complete') {
+              dispatch({ type: 'COMPLETE' });
+              onResults(json.result ?? json);
+              return;
+            }
+            if (status === 'failed' || status === 'error') {
+              dispatch({ type: 'SET_ERROR', message: json?.message || 'Analysis failed' });
+              return;
+            }
+          await new Promise((r) => setTimeout(r, 2000));
+        } catch {
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+      }
+      if (!cancelled) dispatch({ type: 'SET_ERROR', message: 'Timed out waiting for result' });
+    }
+
+    start();
+
+    return () => {
+      cancelled = true;
+      abortRef.current?.abort();
+      xhr?.abort();
+      if (simulateId) clearInterval(simulateId);
+    };
+  }, [file, onResults]);
+
+  const {
+    phase,
+    uploadProgress,
+    uploadLoaded,
+    uploadTotal,
+    uploadSpeedBps,
+    uploadEtaSec,
+    processingProgress,
+    processingStage,
+    error,
+    loading,
+  } = state;
+
+  if (loading && phase === 'uploading') {
+    return (
+      <div className="mx-auto mt-0 w-full rounded-2xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 p-4 sm:p-5 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">Uploading APK</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">{uploadProgress}%</div>
+        </div>
+        <div className="mt-3 h-2 w-full rounded-full bg-slate-100 dark:bg-slate-700">
+          <div className="h-2 rounded-full bg-slate-900 dark:bg-slate-100 transition-all" style={{ width: `${uploadProgress}%` }} />
+        </div>
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-600 dark:text-slate-400" aria-live="polite">
+          <div>
+            <div className="text-slate-500 dark:text-slate-400">Transferred</div>
+            <div className="font-medium">
+              {bytesToReadable(uploadLoaded)} / {bytesToReadable(uploadTotal || file.size)}
+            </div>
+          </div>
+          <div>
+            <div className="text-slate-500 dark:text-slate-400">Speed</div>
+            <div className="font-medium">{formatSpeed(uploadSpeedBps)}</div>
+          </div>
+          <div>
+            <div className="text-slate-500 dark:text-slate-400">ETA</div>
+            <div className="font-medium">{uploadEtaSec != null ? formatDuration(uploadEtaSec) : '—'}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading && phase === 'queued') {
+    return (
+      <div className="mx-auto w-full rounded-2xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 p-4 sm:p-5 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">Queued</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">Waiting…</div>
+        </div>
+        <div className="mt-3 h-2 w-full rounded-full bg-slate-100 dark:bg-slate-700">
+          <div className="h-2 w-1/12 rounded-full bg-slate-300 dark:bg-slate-500 animate-pulse" />
+        </div>
+      </div>
+    );
+  }
+
+  if (loading && phase === 'processing') {
+    return (
+      <div className="mx-auto w-full rounded-2xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 p-4 sm:p-5 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">Analyzing APK</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">{processingProgress}%</div>
+        </div>
+        <div className="mt-1 text-xs text-slate-600 dark:text-slate-400" aria-live="polite">
+          {processingStage || 'Starting…'}
+        </div>
+        <div className="mt-3 h-2 w-full rounded-full bg-slate-100 dark:bg-slate-700">
+          <div className="h-2 rounded-full bg-slate-900 dark:bg-slate-100 transition-all" style={{ width: `${processingProgress}%` }} />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return <div className="mt-4 text-center text-red-600 dark:text-red-400">Error: {error}</div>;
+  }
+
+  return null;
+}
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [apkFile, setApkFile] = useState<File | null>(null);
+  const router = useRouter();
+  const [, setHealth] = useState<any | null>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+  // One-time health check (quietly stored)
+  useEffect(() => {
+    let mounted = true;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 50000);
+
+    (async () => {
+      try {
+        const res = await fetch('/api/health', { signal: controller.signal });
+        if (!mounted) return;
+        if (!res.ok) {
+          setHealth({ status: 'unhealthy', code: res.status });
+          return;
+        }
+        const json = await res.json();
+        if (mounted) setHealth(json);
+      } catch (e: any) {
+        if (mounted) setHealth({ status: 'error', message: e?.message || 'request failed' });
+      } finally {
+        clearTimeout(timeout);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, []);
+
+  const reset = useCallback(() => setApkFile(null), []);
+  const handleSelect = useCallback((file: File) => setApkFile(file), []);
+  const handleResults = useCallback(
+    (results: AnalysisResult) => {
+      localStorage.setItem('analysisResults', JSON.stringify(results));
+      router.push('/result');
+    },
+    [router]
+  );
+
+  return (
+    <main className="relative min-h-screen bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 flex flex-col items-center justify-center">
+      <UploadSection
+        onSelect={handleSelect}
+        selectedFile={apkFile}
+        onClear={reset}
+        onResults={handleResults}
+      />
+    </main>
   );
 }
