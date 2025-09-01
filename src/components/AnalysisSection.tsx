@@ -140,12 +140,12 @@ export function AnalysisSection({ file, onResults }: { file: File; onResults: (r
       } catch (error) {
         const err = error as { message?: string } | undefined;
         if (cancelled) return;
-        if (simulateId) clearInterval(simulateId);
+        if (simulateId) { clearInterval(simulateId); simulateId = null; }
         dispatch({ type: 'SET_ERROR', message: err?.message || 'Upload failed' });
         return;
-      } finally {
-        if (simulateId) clearInterval(simulateId);
       }
+
+      // polling removed per request; client-side upload progress is driven by XHR onprogress
 
       if (cancelled) return;
       dispatch({ type: 'SET_PHASE', phase: 'queued' });
