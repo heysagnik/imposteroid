@@ -209,6 +209,8 @@ function UploadSection({
                 <Image
                   src="/fingerprint.png"
                   alt="Identity"
+                  width={20}
+                  height={20}
                   className="h-5 w-5 text-blue-600 dark:text-blue-400"
                 />
               ),
@@ -221,6 +223,8 @@ function UploadSection({
                 <Image
                   src="/certificate.png"
                   alt="Certificate"
+                  width={20}
+                  height={20}
                   className="h-5 w-5 text-blue-600 dark:text-blue-400"
                 />
               ),
@@ -233,6 +237,8 @@ function UploadSection({
                 <Image
                   src="/compliance.png"
                   alt="Risk"
+                  width={20}
+                  height={20}
                   className="h-5 w-5 text-blue-600 dark:text-blue-400"
                 />
               ),

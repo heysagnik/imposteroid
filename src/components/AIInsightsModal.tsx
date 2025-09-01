@@ -44,7 +44,7 @@ export function AIInsightsModal({
        <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 dark:border-slate-600 bg-white/95 dark:bg-slate-800/95 px-5 py-3 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-slate-800/60">
           <div className="flex items-center gap-2">
             <span className="relative inline-flex h-6 w-6 items-center justify-center">
-              <Image src="https://upload.wikimedia.org/wikipedia/commons/1/1d/Google_Gemini_icon_2025.svg" alt="Gemini" className="relative h-4 w-4 text-slate-800 dark:text-slate-200" />
+              <Image src="https://upload.wikimedia.org/wikipedia/commons/1/1d/Google_Gemini_icon_2025.svg" alt="Gemini" className="relative h-4 w-4 text-slate-800 dark:text-slate-200" width={16} height={16} />
             </span>
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">AI Summary</h3>
           </div>
