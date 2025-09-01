@@ -13,9 +13,11 @@ export async function GET(): Promise<Response> {
 
     const json = await upstream.json().catch(() => null);
     return Response.json(json ?? { status: 'unknown' }, { status: 200, headers: { 'cache-control': 'no-store' } });
-  } catch (e: any) {
-    if (e?.name === 'AbortError') return Response.json({ status: 'timeout' }, { status: 504 });
-    return Response.json({ status: 'error', message: e?.message || 'request failed' }, { status: 502 });
+  } catch (error) {
+    // Narrow unknown error and safely access properties
+    const err = error as { name?: string; message?: string } | undefined;
+    if (err?.name === 'AbortError') return Response.json({ status: 'timeout' }, { status: 504 });
+    return Response.json({ status: 'error', message: err?.message || 'request failed' }, { status: 502 });
   }
 }
 

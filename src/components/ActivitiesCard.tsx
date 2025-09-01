@@ -4,7 +4,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ActivityChip } from './ActivityChip';
 
 export function ActivitiesCard({ activities, onOpenModal }: { activities: string[]; onOpenModal: () => void }) {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const ref = useRef<HTMLDivElement | null>(null);
   const [overflow, setOverflow] = useState(false);
 
@@ -13,14 +12,14 @@ export function ActivitiesCard({ activities, onOpenModal }: { activities: string
     if (!el) return;
     const check = () => setOverflow(el.scrollHeight > el.clientHeight + 5);
     check();
-    const RO: any = (window as any).ResizeObserver;
-    let ro: any;
+    const RO = (window as unknown as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
+    let ro: ResizeObserver | undefined;
     if (RO) { ro = new RO(check); ro.observe(el); }
     window.addEventListener('resize', check);
     return () => { if (ro && el) ro.unobserve(el); window.removeEventListener('resize', check); };
   }, [activities]);
 
-  const toggle = (name: string) => setExpanded((prev) => ({ ...prev, [name]: !prev[name] }));
+  // no-op toggle removed; ActivityChip currently handles its own expand behavior
 
   return (
     <div className="bento-card md:col-span-2 md:row-span-2 lg:col-span-3 lg:row-span-2 rounded-2xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 p-5 shadow-sm flex flex-col">

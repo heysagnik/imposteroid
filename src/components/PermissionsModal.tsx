@@ -13,12 +13,14 @@ export function PermissionsModal({
   onClose: () => void;
   grouped: { suspicious: string[]; legit: string[]; others: string[] };
 }) {
-  if (!open) return null;
   useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [open, onClose]);
+
+  if (!open) return null;
 
   return (
     <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4">

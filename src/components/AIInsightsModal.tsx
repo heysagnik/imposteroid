@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-
+import Image from 'next/image';
 export function AIInsightsModal({
   open,
   onClose,
@@ -19,20 +19,23 @@ export function AIInsightsModal({
     rationale?: string;
   } | null;
 }) {
-  if (!open) return null;
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [open, onClose]);
 
-  const [loading, setLoading] = useState(true);
   useEffect(() => {
     setLoading(true);
+    if (!open) return;
     const t = setTimeout(() => setLoading(false), 500);
     return () => clearTimeout(t);
   }, [open]);
+
+  if (!open) return null;
 
   return (
     <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -41,7 +44,7 @@ export function AIInsightsModal({
        <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 dark:border-slate-600 bg-white/95 dark:bg-slate-800/95 px-5 py-3 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-slate-800/60">
           <div className="flex items-center gap-2">
             <span className="relative inline-flex h-6 w-6 items-center justify-center">
-              <img src="https://upload.wikimedia.org/wikipedia/commons/1/1d/Google_Gemini_icon_2025.svg" alt="Gemini" className="relative h-4 w-4 text-slate-800 dark:text-slate-200" />
+              <Image src="https://upload.wikimedia.org/wikipedia/commons/1/1d/Google_Gemini_icon_2025.svg" alt="Gemini" className="relative h-4 w-4 text-slate-800 dark:text-slate-200" />
             </span>
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">AI Summary</h3>
           </div>

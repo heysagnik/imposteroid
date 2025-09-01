@@ -23,8 +23,8 @@ export function PermissionChip({
     if (!el) return;
     const measure = () => setContentHeight(el.scrollHeight);
     measure();
-    const RO: any = (window as any).ResizeObserver;
-    let ro: any;
+    const RO = (window as unknown as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
+    let ro: ResizeObserver | undefined;
     if (RO) { ro = new RO(measure); ro.observe(el); }
     window.addEventListener('resize', measure);
     return () => { if (ro && el) ro.unobserve(el); window.removeEventListener('resize', measure); };

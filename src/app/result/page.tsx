@@ -1,6 +1,8 @@
 'use client';
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import Image from 'next/image';
 import { RiskCard } from '../../components/RiskCard';
 import { IdentityCard } from '../../components/IdentityCard';
 import { PermissionsCard } from '../../components/PermissionsCard';
@@ -191,11 +193,7 @@ export default function ResultPage() {
                   {identity.verdict}
                 </span>
               ) : null}
-              {identity?.verdict ? (
-                <span className="rounded-full px-2.5 py-1 text-xs font-medium border bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-600">
-                  {identity.verdict}
-                </span>
-              ) : null}
+              
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 print-hidden">
@@ -203,7 +201,7 @@ export default function ResultPage() {
               onClick={() => setShowAIInsights(true)}
               className="inline-flex items-center rounded-full border border-slate-300 dark:border-slate-600 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
             >
-              <img src="https://upload.wikimedia.org/wikipedia/commons/1/1d/Google_Gemini_icon_2025.svg" alt="Gemini" className="h-4 w-4 mr-2" />
+              <Image src="https://upload.wikimedia.org/wikipedia/commons/1/1d/Google_Gemini_icon_2025.svg" alt="Gemini" className="h-4 w-4 mr-2" />
               Summarize
             </button>
             <button
@@ -385,13 +383,6 @@ export default function ResultPage() {
       </div>
     </main>
   );
-}
-
-
-// local helpers kept where referenced in this file only
-function formatPercent(value: any) {
-  if (typeof value !== 'number' || Number.isNaN(value)) return '-';
-  return `${Math.round(value * 100)}%`;
 }
 
 

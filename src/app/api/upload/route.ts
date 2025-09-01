@@ -22,8 +22,9 @@ export async function POST(req: Request): Promise<Response> {
         'cache-control': 'no-store',
       },
     });
-  } catch (error: any) {
-    return Response.json({ message: error?.message || 'Upload proxy error' }, { status: 500 });
+  } catch (error) {
+    const err = error as { message?: string } | undefined;
+    return Response.json({ message: err?.message || 'Upload proxy error' }, { status: 500 });
   }
 }
 

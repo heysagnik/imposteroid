@@ -1,8 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, useReducer } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ThemeToggle } from '../components/ThemeToggle';
+import AnalysisSection from '../components/AnalysisSection';
+import Image from 'next/image';
 
 const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200 MB
 const ALLOWED_TYPES = [
@@ -11,51 +13,17 @@ const ALLOWED_TYPES = [
   'application/octet-stream',
 ];
 
-function bytesToReadable(size: number) {
-  const mb = size / (1024 * 1024);
-  if (mb < 1) return `${Math.round(size / 1024)} KB`;
-  return `${mb.toFixed(1)} MB`;
-}
 
-function formatSpeed(bps: number) {
-  if (!bps || bps <= 0) return '—';
-  const kbps = bps / 1024;
-  const mbps = kbps / 1024;
-  if (mbps >= 1) return `${mbps.toFixed(2)} MB/s`;
-  if (kbps >= 1) return `${kbps.toFixed(0)} KB/s`;
-  return `${bps.toFixed(0)} B/s`;
-}
 
-function formatDuration(totalSeconds: number) {
-  const s = Math.max(0, Math.round(totalSeconds));
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  if (m > 0) return `${m}m ${sec}s`;
-  return `${sec}s`;
-}
 
-function stageFriendly(stage?: string) {
-  if (!stage) return 'Starting…';
-  return stage.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-interface AnalysisResult {
-  identity: { packageName: string; version: string };
-  certificate: { valid: boolean; issuer: string };
-  risk: { permissions: string[]; obfuscated: boolean };
-}
-
-// Upload section keeps same visual layout; internal logic improved
 function UploadSection({
   onSelect,
   selectedFile,
-  onClear,
   onResults,
 }: {
   onSelect: (file: File) => void;
   selectedFile?: File | null;
-  onClear?: () => void;
-  onResults?: (results: any) => void;
+  onResults?: (results: unknown) => void;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -237,7 +205,8 @@ function UploadSection({
               t: 'Identity',
               d: 'Check package names and branding.',
               icon: (
-                <img
+                
+                <Image
                   src="/fingerprint.png"
                   alt="Identity"
                   className="h-5 w-5 text-blue-600 dark:text-blue-400"
@@ -248,7 +217,8 @@ function UploadSection({
               t: 'Certificate',
               d: 'Verify signing and repack signs.',
               icon: (
-                <img
+                
+                <Image
                   src="/certificate.png"
                   alt="Certificate"
                   className="h-5 w-5 text-blue-600 dark:text-blue-400"
@@ -259,7 +229,8 @@ function UploadSection({
               t: 'Risk',
               d: 'Flag permissions and obfuscation.',
               icon: (
-                <img
+                
+                <Image
                   src="/compliance.png"
                   alt="Risk"
                   className="h-5 w-5 text-blue-600 dark:text-blue-400"
@@ -292,297 +263,10 @@ function UploadSection({
   );
 }
 
-// Analysis reducer
-type Phase = 'idle' | 'uploading' | 'queued' | 'processing' | 'complete' | 'error';
-
-interface AnalysisState {
-  phase: Phase;
-  uploadProgress: number;
-  uploadLoaded: number;
-  uploadTotal: number;
-  uploadSpeedBps: number;
-  uploadEtaSec: number | null;
-  processingProgress: number;
-  processingStage: string | null;
-  error: string | null;
-  startedProcessing: boolean;
-  loading: boolean;
-}
-
-type Action =
-  | { type: 'UPLOAD_PROGRESS'; loaded: number; total: number; bps: number; eta: number | null }
-  | { type: 'SET_PHASE'; phase: Phase }
-  | { type: 'SET_ERROR'; message: string }
-  | { type: 'SET_STAGE'; stage: string }
-  | { type: 'ADVANCE_PROCESSING'; value?: number }
-  | { type: 'COMPLETE' }
-  | { type: 'RESET_UPLOAD_SIM'; pct?: number };
-
-const initialAnalysis: AnalysisState = {
-  phase: 'idle',
-  uploadProgress: 0,
-  uploadLoaded: 0,
-  uploadTotal: 0,
-  uploadSpeedBps: 0,
-  uploadEtaSec: null,
-  processingProgress: 0,
-  processingStage: null,
-  error: null,
-  startedProcessing: false,
-  loading: false,
-};
-
-function analysisReducer(state: AnalysisState, action: Action): AnalysisState {
-  switch (action.type) {
-    case 'SET_PHASE':
-      return { ...state, phase: action.phase, loading: action.phase !== 'complete' && action.phase !== 'error' };
-    case 'UPLOAD_PROGRESS':
-      return {
-        ...state,
-        uploadLoaded: action.loaded,
-        uploadTotal: action.total,
-        uploadProgress: Math.min(100, Math.round((action.loaded / action.total) * 100)),
-        uploadSpeedBps: action.bps,
-        uploadEtaSec: action.eta,
-      };
-    case 'SET_ERROR':
-      return { ...state, error: action.message, phase: 'error', loading: false };
-    case 'SET_STAGE':
-      return { ...state, processingStage: stageFriendly(action.stage) };
-    case 'ADVANCE_PROCESSING':
-      return {
-        ...state,
-        phase: state.phase === 'queued' ? 'processing' : state.phase,
-        startedProcessing: true,
-        processingProgress: Math.min(100, action.value != null ? action.value : state.processingProgress + 15),
-      };
-    case 'COMPLETE':
-      return { ...state, processingProgress: 100, phase: 'complete', loading: false };
-    case 'RESET_UPLOAD_SIM':
-      return { ...state, uploadProgress: action.pct ?? state.uploadProgress };
-    default:
-      return state;
-  }
-}
-
-function AnalysisSection({
-  file,
-  onResults,
-}: {
-  file: File;
-  onResults: (results: AnalysisResult) => void;
-}) {
-  const [state, dispatch] = useReducer(analysisReducer, initialAnalysis);
-  const abortRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    abortRef.current?.abort();
-    abortRef.current = new AbortController();
-    let cancelled = false;
-    let simulateId: number | null = null;
-    let xhr: XMLHttpRequest | null = null;
-
-    async function start() {
-      dispatch({ type: 'SET_PHASE', phase: 'uploading' });
-      dispatch({ type: 'RESET_UPLOAD_SIM' });
-      const formData = new FormData();
-      formData.append('apk', file);
-
-      xhr = new XMLHttpRequest();
-      xhr.open('POST', '/api/upload');
-
-      let lastTs = Date.now();
-      let lastLoadedLocal = 0;
-
-      // Simulated slow advance to avoid stuck bar early
-      simulateId = window.setInterval(() => {
-        dispatch({ type: 'RESET_UPLOAD_SIM' });
-      }, 1000);
-
-      xhr.upload.onprogress = (e) => {
-        if (!e.lengthComputable) return;
-        const now = Date.now();
-        const deltaBytes = e.loaded - lastLoadedLocal;
-        const deltaMs = now - lastTs;
-        const bps = deltaMs > 0 && deltaBytes >= 0 ? (deltaBytes / deltaMs) * 1000 : 0;
-        const remaining = Math.max(0, e.total - e.loaded);
-        const eta = bps > 0 ? Math.round(remaining / bps) : null;
-        lastTs = now;
-        lastLoadedLocal = e.loaded;
-        dispatch({ type: 'UPLOAD_PROGRESS', loaded: e.loaded, total: e.total, bps, eta });
-      };
-
-      const uploadPromise = new Promise<{ job_id?: string }>((resolve, reject) => {
-        xhr!.onload = () => {
-          try {
-            if (xhr!.status >= 200 && xhr!.status < 300) resolve(JSON.parse(xhr!.responseText || '{}'));
-            else reject(new Error('Upload failed'));
-          } catch (err) {
-            reject(err);
-          }
-        };
-        xhr!.onerror = () => reject(new Error('Upload network error'));
-        xhr!.onabort = () => reject(new Error('Upload aborted'));
-      });
-
-      xhr.send(formData);
-
-      let jobId: string | undefined;
-      try {
-        const uploadJson = await uploadPromise;
-        jobId = uploadJson.job_id;
-        if (!jobId) throw new Error('Missing job_id in response');
-      } catch (e: any) {
-        if (cancelled) return;
-        if (simulateId) clearInterval(simulateId);
-        dispatch({ type: 'SET_ERROR', message: e?.message || 'Upload failed' });
-        return;
-      } finally {
-        if (simulateId) clearInterval(simulateId);
-      }
-
-      if (cancelled) return;
-      dispatch({ type: 'SET_PHASE', phase: 'queued' });
-
-      // Poll sequentially
-      const startTime = Date.now();
-      const timeoutMs = 2 * 60 * 1000;
-      let lastSignature: string | null = null;
-
-      while (!cancelled && Date.now() - startTime < timeoutMs) {
-        try {
-          const res = await fetch(`/api/result/${jobId}`, {
-            signal: abortRef.current?.signal,
-            cache: 'no-store',
-          });
-          if (!res.ok) {
-            await new Promise((r) => setTimeout(r, 1500));
-            continue;
-          }
-            const json = await res.json();
-            const status: string | undefined = json?.status;
-            const stage: string | undefined = json?.stage || json?.progress?.stage;
-            const sig = `${status || ''}::${stage || ''}`;
-            if (sig !== lastSignature) {
-              dispatch({ type: 'ADVANCE_PROCESSING' });
-              lastSignature = sig;
-            }
-            if (stage) dispatch({ type: 'SET_STAGE', stage });
-            if (status === 'processing' || status === 'running') {
-              dispatch({ type: 'SET_PHASE', phase: 'processing' });
-            }
-            if (status === 'complete') {
-              dispatch({ type: 'COMPLETE' });
-              onResults(json.result ?? json);
-              return;
-            }
-            if (status === 'failed' || status === 'error') {
-              dispatch({ type: 'SET_ERROR', message: json?.message || 'Analysis failed' });
-              return;
-            }
-          await new Promise((r) => setTimeout(r, 2000));
-        } catch {
-          await new Promise((r) => setTimeout(r, 2000));
-        }
-      }
-      if (!cancelled) dispatch({ type: 'SET_ERROR', message: 'Timed out waiting for result' });
-    }
-
-    start();
-
-    return () => {
-      cancelled = true;
-      abortRef.current?.abort();
-      xhr?.abort();
-      if (simulateId) clearInterval(simulateId);
-    };
-  }, [file, onResults]);
-
-  const {
-    phase,
-    uploadProgress,
-    uploadLoaded,
-    uploadTotal,
-    uploadSpeedBps,
-    uploadEtaSec,
-    processingProgress,
-    processingStage,
-    error,
-    loading,
-  } = state;
-
-  if (loading && phase === 'uploading') {
-    return (
-      <div className="mx-auto mt-0 w-full rounded-2xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 p-4 sm:p-5 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">Uploading APK</div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">{uploadProgress}%</div>
-        </div>
-        <div className="mt-3 h-2 w-full rounded-full bg-slate-100 dark:bg-slate-700">
-          <div className="h-2 rounded-full bg-slate-900 dark:bg-slate-100 transition-all" style={{ width: `${uploadProgress}%` }} />
-        </div>
-        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-600 dark:text-slate-400" aria-live="polite">
-          <div>
-            <div className="text-slate-500 dark:text-slate-400">Transferred</div>
-            <div className="font-medium">
-              {bytesToReadable(uploadLoaded)} / {bytesToReadable(uploadTotal || file.size)}
-            </div>
-          </div>
-          <div>
-            <div className="text-slate-500 dark:text-slate-400">Speed</div>
-            <div className="font-medium">{formatSpeed(uploadSpeedBps)}</div>
-          </div>
-          <div>
-            <div className="text-slate-500 dark:text-slate-400">ETA</div>
-            <div className="font-medium">{uploadEtaSec != null ? formatDuration(uploadEtaSec) : '—'}</div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (loading && phase === 'queued') {
-    return (
-      <div className="mx-auto w-full rounded-2xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 p-4 sm:p-5 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">Queued</div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">Waiting…</div>
-        </div>
-        <div className="mt-3 h-2 w-full rounded-full bg-slate-100 dark:bg-slate-700">
-          <div className="h-2 w-1/12 rounded-full bg-slate-300 dark:bg-slate-500 animate-pulse" />
-        </div>
-      </div>
-    );
-  }
-
-  if (loading && phase === 'processing') {
-    return (
-      <div className="mx-auto w-full rounded-2xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 p-4 sm:p-5 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">Analyzing APK</div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">{processingProgress}%</div>
-        </div>
-        <div className="mt-1 text-xs text-slate-600 dark:text-slate-400" aria-live="polite">
-          {processingStage || 'Starting…'}
-        </div>
-        <div className="mt-3 h-2 w-full rounded-full bg-slate-100 dark:bg-slate-700">
-          <div className="h-2 rounded-full bg-slate-900 dark:bg-slate-100 transition-all" style={{ width: `${processingProgress}%` }} />
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return <div className="mt-4 text-center text-red-600 dark:text-red-400">Error: {error}</div>;
-  }
-
-  return null;
-}
-
 export default function Home() {
   const [apkFile, setApkFile] = useState<File | null>(null);
   const router = useRouter();
-  const [, setHealth] = useState<any | null>(null);
+  const [, setHealth] = useState<unknown | null>(null);
 
   // One-time health check (quietly stored)
   useEffect(() => {
@@ -600,8 +284,9 @@ export default function Home() {
         }
         const json = await res.json();
         if (mounted) setHealth(json);
-      } catch (e: any) {
-        if (mounted) setHealth({ status: 'error', message: e?.message || 'request failed' });
+      } catch (error) {
+        const err = error as { message?: string } | undefined;
+        if (mounted) setHealth({ status: 'error', message: err?.message || 'request failed' });
       } finally {
         clearTimeout(timeout);
       }
@@ -614,10 +299,9 @@ export default function Home() {
     };
   }, []);
 
-  const reset = useCallback(() => setApkFile(null), []);
   const handleSelect = useCallback((file: File) => setApkFile(file), []);
   const handleResults = useCallback(
-    (results: AnalysisResult) => {
+    (results: unknown) => {
       localStorage.setItem('analysisResults', JSON.stringify(results));
       router.push('/result');
     },
@@ -629,7 +313,6 @@ export default function Home() {
       <UploadSection
         onSelect={handleSelect}
         selectedFile={apkFile}
-        onClear={reset}
         onResults={handleResults}
       />
     </main>

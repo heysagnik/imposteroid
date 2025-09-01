@@ -1,7 +1,11 @@
 export const dynamic = 'force-dynamic';
 
-export async function GET(_req: Request, { params }: { params: { job_id: string } }): Promise<Response> {
-  const { job_id } = params;
+import { NextRequest } from 'next/server';
+
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ job_id: string }> }): Promise<Response> {
+  // `params` may be a promise in the runtime; await it before accessing properties
+  const resolvedParams = await params as { job_id: string };
+  const { job_id } = resolvedParams;
   if (!job_id) {
     return Response.json({ message: 'Missing job_id' }, { status: 400 });
   }
@@ -21,8 +25,9 @@ export async function GET(_req: Request, { params }: { params: { job_id: string 
         'cache-control': 'no-store',
       },
     });
-  } catch (error: any) {
-    return Response.json({ message: error?.message || 'Result proxy error' }, { status: 500 });
+  } catch (error) {
+    const err = error as { message?: string } | undefined;
+    return Response.json({ message: err?.message || 'Result proxy error' }, { status: 500 });
   }
 }
 
