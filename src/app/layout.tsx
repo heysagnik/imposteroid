@@ -10,7 +10,7 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "Imposteroid - APK Analysis Tool",
+  title: "ApkSure - APK Analysis Tool",
   description: "Upload and analyze APK files to detect potential security issues and malicious behavior",
 };
 

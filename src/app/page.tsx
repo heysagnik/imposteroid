@@ -92,7 +92,7 @@ function UploadSection({
   return (
     <section
       className="w-full flex flex-col items-center justify-center text-center px-4 sm:px-6 py-16 sm:py-20"
-      aria-label="Imposteroid APK Analyzer"
+      aria-label="ApkSure APK Analyzer"
     >
       <div className="sunlight-top" />
       <div className="theme-toggle-container">
